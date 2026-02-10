@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fábio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    :root{
+      --bg:#000;
+      --card: rgba(255,255,255,.06);
+      --stroke: rgba(255,255,255,.12);
+      --shadow: 0 30px 80px rgba(0,0,0,.70);
+    }
+
+    html,body{ height:100%; background:var(--bg); }
+    body{ overflow:hidden; }
+
+    /* --- CANVAS (background + visualizer) --- */
+    #fx{
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      opacity: 0;
+      transition: opacity 700ms ease;
+    }
+    body.activated #fx{ opacity: 1; }
+
+    .vignette{
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events:none;
+      background:
+        radial-gradient(1000px 800px at 50% 20%, rgba(255,255,255,0.08), transparent 60%),
+        radial-gradient(900px 650px at 20% 80%, rgba(124,58,237,0.10), transparent 60%),
+        radial-gradient(900px 650px at 80% 75%, rgba(0,209,255,0.10), transparent 60%),
+        radial-gradient(1200px 900px at 50% 50%, transparent 35%, rgba(0,0,0,0.85) 78%, rgba(0,0,0,0.98) 100%);
+      opacity: 0;
+      transition: opacity 700ms ease;
+    }
+    body.activated .vignette{ opacity: 1; }
+
+    /* --- LAYOUT --- */
+    .stage{
+      position: relative;
+      z-index: 2;
+      min-height: 100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 48px 18px;
+      text-align:center;
+    }
+
+    .hello{
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 0.95;
+      text-shadow: 0 18px 60px rgba(0,0,0,.65);
+    }
+
+    /* --- PRESENTE --- */
+    .gift-wrap{
+      --w: 240px;
+      --lidH: 74px;
+      --boxH: 164px;
+      --radius: 22px;
+      width: var(--w);
+      height: calc(var(--lidH) + var(--boxH));
+      position: relative;
+      margin: 34px auto 0;
+      cursor: pointer;
+      transform: translateZ(0);
+      filter: drop-shadow(0 24px 60px rgba(0,0,0,.65));
+      transition: transform 400ms cubic-bezier(.2,.9,.2,1), opacity 350ms ease;
+    }
+    .gift-wrap:hover{ transform: translateY(-2px) scale(1.01); }
+    .gift-wrap.gone{ opacity:0; transform: translateY(10px) scale(0.98); pointer-events:none; }
+
+    .gift-lid{
+      position:absolute; inset:0 0 auto 0;
+      height: var(--lidH);
+      border-radius: var(--radius) var(--radius) 16px 16px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+        linear-gradient(135deg, #0a0f1a, #070a12);
+      border: 1px solid rgba(255,255,255,.10);
+      transform-origin: 16% 88%;
+      transform: rotate(0deg) translateY(0);
+      transition: transform 520ms cubic-bezier(.2,.9,.2,1);
+      overflow:hidden;
+    }
+    .gift-lid:before{
+      content:"";
+      position:absolute; left:0; top:50%;
+      transform: translateY(-50%);
+      width:100%; height: 18px;
+      background: linear-gradient(90deg,#ff004c,#ff9a00,#ffe600,#00ff85,#00d1ff,#7c3aed,#ff00ea,#ff004c);
+      opacity: .95;
+      filter: saturate(1.1);
+    }
+    .gift-lid:after{
+      content:"";
+      position:absolute; inset:0;
+      background: radial-gradient(200px 90px at 20% 30%, rgba(255,255,255,.14), transparent 60%);
+      pointer-events:none;
+    }
+
+    .gift-box{
+      position:absolute; inset:auto 0 0 0;
+      height: var(--boxH);
+      top: var(--lidH);
+      border-radius: 18px 18px var(--radius) var(--radius);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+        linear-gradient(135deg, #070a12, #04060c);
+      border: 1px solid rgba(255,255,255,.10);
+      overflow:hidden;
+    }
+    .gift-box:before{
+      content:"";
+      position:absolute;
+      left:50%; top:-50px;
+      transform: translateX(-50%);
+      width: 30px;
+      height: calc(100% + 100px);
+      border-radius: 999px;
+      background: linear-gradient(180deg,#ff004c,#7c3aed);
+      opacity: .95;
+      filter: saturate(1.1);
+    }
+    .gift-box:after{
+      content:"";
+      position:absolute; inset:0;
+      background:
+        radial-gradient(240px 160px at 20% 25%, rgba(255,255,255,.10), transparent 62%),
+        radial-gradient(280px 200px at 70% 80%, rgba(0,209,255,.08), transparent 60%);
+      pointer-events:none;
+    }
+
+    .bow{
+      position:absolute;
+      left:50%; top: 10px;
+      transform: translateX(-50%);
+      width: 98px; height: 56px;
+      pointer-events:none;
+    }
+    .bow:before,.bow:after{
+      content:"";
+      position:absolute;
+      width: 48px; height: 40px;
+      border-radius: 999px 999px 999px 18px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 55%),
+        linear-gradient(135deg,#ff004c,#7c3aed);
+      box-shadow: 0 14px 28px rgba(0,0,0,.35);
+    }
+    .bow:before{ left:0; transform: rotate(-12deg); }
+    .bow:after { right:0; transform: rotate(12deg) scaleX(-1); }
+
+    .knot{
+      position:absolute;
+      left:50%; top: 22px;
+      transform: translateX(-50%);
+      width: 18px; height: 18px;
+      border-radius:999px;
+      background: linear-gradient(135deg, rgba(255,255,255,.7), rgba(255,255,255,.25));
+      border: 1px solid rgba(255,255,255,.25);
+      box-shadow: 0 12px 22px rgba(0,0,0,.35);
+    }
+
+    .gift-wrap:hover .gift-lid{ transform: rotate(-20deg) translate(-2px,-6px); }
+    .gift-wrap.open .gift-lid{ transform: rotate(-78deg) translate(-8px,-18px); }
+
+    .burst{
+      position:absolute;
+      left:50%; top: 16px;
+      width: 320px; height: 320px;
+      transform: translateX(-50%);
+      opacity: 0;
+      pointer-events:none;
+      filter: drop-shadow(0 20px 30px rgba(0,0,0,.55));
+    }
+    .gift-wrap.open .burst{ animation: burstIn 980ms cubic-bezier(.2,.9,.2,1) forwards; }
+    @keyframes burstIn{
+      0%{ opacity:0; transform: translateX(-50%) scale(.72); }
+      20%{ opacity:1; }
+      100%{ opacity:0; transform: translateX(-50%) scale(1.12); }
+    }
+    .spark{ position:absolute; inset:0; }
+    .spark:before,.spark:after{
+      content:"";
+      position:absolute;
+      left:50%; top:50%;
+      width: 9px; height: 9px;
+      border-radius:999px;
+      transform: translate(-50%,-50%);
+      background: conic-gradient(from 0deg,#ff004c,#ff9a00,#ffe600,#00ff85,#00d1ff,#7c3aed,#ff00ea,#ff004c);
+      animation: confetti 980ms ease-out forwards;
+    }
+    .spark:after{ width: 11px; height: 11px; animation-delay: 70ms; filter: blur(.2px); }
+    @keyframes confetti{
+      0%{ opacity:.15; box-shadow: 0 0 0 0 rgba(255,0,76,0), 0 0 0 0 rgba(0,209,255,0); }
+      18%{ opacity:1; }
+      100%{
+        opacity:0;
+        box-shadow:
+          -130px -80px 0 0 rgba(255,0,76,.95),
+          140px -70px 0 0 rgba(0,209,255,.95),
+          -110px 110px 0 0 rgba(255,154,0,.95),
+          120px 120px 0 0 rgba(0,255,133,.95),
+          0 -160px 0 0 rgba(255,230,0,.95),
+          0 170px 0 0 rgba(124,58,237,.95),
+          -175px 10px 0 0 rgba(255,0,234,.95),
+          180px 8px 0 0 rgba(255,0,76,.95);
+      }
+    }
+
+    /* --- REVEAL --- */
+    .reveal{
+      margin-top: 22px;
+      opacity:0;
+      transform: translateY(18px) scale(.98);
+      transition: opacity 520ms ease, transform 700ms cubic-bezier(.2,.9,.2,1);
+      pointer-events:none;
+    }
+    body.activated .reveal{
+      opacity:1;
+      transform: translateY(0) scale(1);
+      pointer-events:auto;
+    }
+    .revealCard{
+      display:inline-block;
+      padding: 18px 20px;
+      border-radius: 22px;
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      max-width: min(720px, 92vw);
+    }
+
+    /* --- BOTÃO ARCO-ÍRIS --- */
+    .rainbow-btn{
+      position: relative;
+      padding: 14px 22px;
+      border-radius: 16px;
+      background: rgba(0,0,0,.72);
+      color:#fff;
+      font-weight: 900;
+      letter-spacing:.02em;
+      box-shadow: 0 18px 60px rgba(0,0,0,.65);
+      transform: translateZ(0);
+      outline: none;
+    }
+    .rainbow-btn::before{
+      content:"";
+      position:absolute;
+      inset:-3px;
+      border-radius: 18px;
+      background: conic-gradient(from 0deg,#ff004c,#ff9a00,#ffe600,#00ff85,#00d1ff,#7c3aed,#ff00ea,#ff004c);
+      animation: spin 1.1s linear infinite;
+      z-index:-2;
+      filter: saturate(1.15);
+    }
+    .rainbow-btn::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius: 16px;
+      background: rgba(0,0,0,.78);
+      z-index:-1;
+    }
+    @keyframes spin{ to{ transform: rotate(360deg); } }
+
+    /* --- BOTÃO A FLUTUAR (JS) --- */
+    #floatingBtn{
+      position: fixed;
+      left: 12vw;
+      top: 70vh;
+      z-index: 3;
+      display:none;
+      will-change: transform, left, top;
+    }
+    body.activated #floatingBtn{ display:block; }
+
+    @media (prefers-reduced-motion: reduce){
+      #fx,.vignette,.gift-lid,.gift-wrap,.burst,.spark:before,.spark:after,
+      .reveal,.rainbow-btn::before { transition:none !important; animation:none !important; }
+    }
+  </style>
+</head>
+
+<body class="text-white">
+  <canvas id="fx"></canvas>
+  <div class="vignette"></div>
+
+  <!-- áudio (fica invisível) -->
+  <audio id="music" src="musica.mp3" preload="auto" crossorigin="anonymous"></audio>
+
+  <main class="stage">
+    <div>
+      <h1 class="hello text-6xl sm:text-7xl md:text-8xl">
+        olá Fábio<span class="opacity-80">...</span>
+      </h1>
+
+      <div id="gift" class="gift-wrap" aria-label="Presente">
+        <div class="gift-lid">
+          <div class="bow"><div class="knot"></div></div>
+        </div>
+        <div class="gift-box"></div>
+        <div class="burst"><div class="spark"></div></div>
+      </div>
+
+      <div class="reveal" id="reveal">
+        <div class="revealCard">
+          <p class="text-2xl sm:text-3xl md:text-4xl font-extrabold leading-tight">
+            parabéns! ganhaste um dia de bolos e ganza
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="floatingBtn" aria-hidden="true">
+    <button class="rainbow-btn active:scale-[0.98] transition-transform" type="button">
+      aceitar
+    </button>
+  </div>
+
+  <script>
+    // ----------------------------
+    // Canvas: background + partículas + audio visualizer
+    // ----------------------------
+    const canvas = document.getElementById("fx");
+    const ctx = canvas.getContext("2d", { alpha: true });
+    let W, H, DPR;
+
+    function resize(){
+      DPR = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.floor(window.innerWidth * DPR);
+      canvas.height = Math.floor(window.innerHeight * DPR);
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      W = window.innerWidth;
+      H = window.innerHeight;
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // partículas
+    const particles = [];
+    const rand = (a,b)=>a+Math.random()*(b-a);
+
+    function spawnBurst(x,y,count){
+      for(let i=0;i<count;i++){
+        const ang = rand(0, Math.PI*2);
+        const spd = rand(0.6, 2.8);
+        particles.push({
+          x, y,
+          vx: Math.cos(ang)*spd,
+          vy: Math.sin(ang)*spd - rand(0.3,1.1),
+          r: rand(1.2, 2.8),
+          life: rand(70, 140),
+          t: 0,
+          hue: rand(0, 360),
+          tw: rand(0.4, 1.2)
+        });
+      }
+    }
+
+    // ----------------------------
+    // Web Audio API (visualizer)
+    // ----------------------------
+    const audioEl = document.getElementById("music");
+    let audioCtx = null;
+    let analyser = null;
+    let freqData = null;
+    let audioReady = false;
+
+    async function initAudio(){
+      if (audioReady) return;
+
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+
+      // ligar o <audio> ao analyser
+      const source = audioCtx.createMediaElementSource(audioEl);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024; // resolução do visualizer
+      analyser.smoothingTimeConstant = 0.85;
+
+      // master chain
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      audioReady = true;
+    }
+
+    async function playMusic(){
+      try{
+        await initAudio();
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+        // garantir que começa no início (opcional)
+        audioEl.currentTime = 0;
+        await audioEl.play();
+      }catch(err){
+        // se o browser bloquear autoplay ou se faltar o ficheiro
+        console.warn("Não consegui tocar musica.mp3:", err);
+      }
+    }
+
+    // desenhar visualizer (arco + barras)
+    function drawVisualizer(now){
+      if(!audioReady || !analyser) return;
+
+      analyser.getByteFrequencyData(freqData);
+
+      // energia média (0..1)
+      let sum = 0;
+      for (let i=0;i<freqData.length;i++) sum += freqData[i];
+      const avg = (sum / freqData.length) / 255;
+
+      const cx = W/2;
+      const cy = H*0.46;
+      const baseR = Math.min(W,H) * 0.18;
+      const pulse = baseR * (0.08 + avg * 0.25);
+
+      // halo
+      const halo = ctx.createRadialGradient(cx, cy, baseR*0.4, cx, cy, baseR*1.6);
+      halo.addColorStop(0, `rgba(255,255,255,${0.04 + avg*0.06})`);
+      halo.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = halo;
+      ctx.fillRect(0,0,W,H);
+
+      // arco de barras (circular)
+      const bars = 140;
+      const start = -Math.PI * 0.90;
+      const end = Math.PI * 0.90;
+      const step = (end - start) / bars;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      for(let i=0;i<bars;i++){
+        const idx = Math.floor((i / bars) * (freqData.length * 0.55)); // mais focado em graves/médios
+        const v = freqData[idx] / 255; // 0..1
+
+        const a = start + i*step + Math.sin(now*0.0006)*0.002;
+        const len = (baseR*0.18) + v*(baseR*0.75) + avg*(baseR*0.22);
+
+        const x1 = Math.cos(a) * (baseR + pulse);
+        const y1 = Math.sin(a) * (baseR + pulse);
+        const x2 = Math.cos(a) * (baseR + pulse + len);
+        const y2 = Math.sin(a) * (baseR + pulse + len);
+
+        // cor por ângulo (arco-íris discreto)
+        const hue = ( (i / bars) * 360 + now*0.02 ) % 360;
+        const alpha = 0.18 + v*0.55;
+
+        ctx.strokeStyle = `hsla(${hue}, 95%, 62%, ${alpha})`;
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = "round";
+
+        ctx.beginPath();
+        ctx.moveTo(x1,y1);
+        ctx.lineTo(x2,y2);
+        ctx.stroke();
+      }
+
+      // “core ring”
+      ctx.strokeStyle = `rgba(255,255,255,${0.10 + avg*0.25})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0,0, baseR*0.92 + pulse*0.25, 0, Math.PI*2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // background + partículas + visualizer
+    let bgActive = false;
+
+    function tick(now){
+      ctx.clearRect(0,0,W,H);
+
+      if(bgActive){
+        // glow base
+        const g1 = ctx.createRadialGradient(W*0.5, H*0.22, 0, W*0.5, H*0.22, W*0.75);
+        g1.addColorStop(0, "rgba(255,255,255,0.05)");
+        g1.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g1;
+        ctx.fillRect(0,0,W,H);
+
+        // visualizer
+        drawVisualizer(now);
+
+        // partículas
+        for(let i=particles.length-1;i>=0;i--){
+          const p = particles[i];
+          p.t++;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vx *= 0.992;
+          p.vy = p.vy*0.992 + 0.01;
+
+          const fade = 1 - (p.t / p.life);
+          const alpha = Math.max(0, fade) * 0.9;
+
+          ctx.beginPath();
+          ctx.fillStyle = `hsla(${p.hue}, 95%, 65%, ${alpha})`;
+          ctx.arc(p.x, p.y, p.r + Math.sin((p.t*0.12)*p.tw)*0.35, 0, Math.PI*2);
+          ctx.fill();
+
+          if(p.t >= p.life) particles.splice(i,1);
+        }
+
+        // mantém movimento no fundo
+        if(Math.random() < 0.06){
+          spawnBurst(rand(0, W), rand(0, H*0.55), 5);
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // ----------------------------
+    // Presente: open -> desaparecer -> revelar -> botão flutuante + música
+    // ----------------------------
+    const gift = document.getElementById("gift");
+    const floating = document.getElementById("floatingBtn");
+    const btn = floating.querySelector("button");
+
+    let opened = false;
+
+    gift.addEventListener("click", async () => {
+      if(opened) return;
+      opened = true;
+
+      // toca música (tem de ser dentro do clique)
+      playMusic();
+
+      // abre (CSS)
+      gift.classList.add("open");
+
+      // ativa o background dinâmico + reveal
+      document.body.classList.add("activated");
+      bgActive = true;
+
+      // burst no topo do presente
+      const rect = gift.getBoundingClientRect();
+      const cx = rect.left + rect.width/2;
+      const cy = rect.top + 20;
+      spawnBurst(cx, cy, 140);
+
+      // micro “impact”
+      gift.animate(
+        [
+          { transform: "translateY(0) scale(1)" },
+          { transform: "translateY(-2px) scale(1.02)" },
+          { transform: "translateY(0) scale(1)" }
+        ],
+        { duration: 420, easing: "cubic-bezier(.2,.9,.2,1)" }
+      );
+
+      // desaparece o presente (para não parecer “mesma página”)
+      setTimeout(() => gift.classList.add("gone"), 620);
+
+      // inicia o botão flutuante
+      setTimeout(startFloating, 650);
+    });
+
+    // ----------------------------
+    // Botão flutuante (suave)
+    // ----------------------------
+    let x = window.innerWidth * 0.12;
+    let y = window.innerHeight * 0.70;
+    let vx = 1.15;
+    let vy = -0.85;
+
+    function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+    function startFloating(){
+      x = window.innerWidth * 0.12;
+      y = window.innerHeight * 0.70;
+      vx = 1.25; vy = -0.95;
+
+      let last = performance.now();
+
+      function step(now){
+        const dt = Math.min(32, now - last);
+        last = now;
+
+        const windX = Math.sin(now * 0.0007) * 0.18;
+        const windY = Math.cos(now * 0.0009) * 0.14;
+
+        x += (vx + windX) * (dt * 0.06);
+        y += (vy + windY) * (dt * 0.06);
+
+        const pad = 18;
+        const bw = btn.offsetWidth || 140;
+        const bh = btn.offsetHeight || 52;
+
+        if(x < pad){ x = pad; vx *= -1; }
+        if(y < pad){ y = pad; vy *= -1; }
+        if(x > window.innerWidth - bw - pad){ x = window.innerWidth - bw - pad; vx *= -1; }
+        if(y > window.innerHeight - bh - pad){ y = window.innerHeight - bh - pad; vy *= -1; }
+
+        vx = clamp(vx + Math.sin(now*0.0011)*0.002, -2.2, 2.2);
+        vy = clamp(vy + Math.cos(now*0.0013)*0.002, -2.2, 2.2);
+
+        floating.style.left = x + "px";
+        floating.style.top = y + "px";
+        floating.style.transform = `translateZ(0) rotate(${Math.sin(now*0.0012)*1.6}deg)`;
+
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    window.addEventListener("resize", () => {
+      resize();
+      if(opened) startFloating();
+    });
+  </script>
+</body>
+</html>
